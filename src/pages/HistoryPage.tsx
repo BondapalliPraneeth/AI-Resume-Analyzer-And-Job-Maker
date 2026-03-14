@@ -1,14 +1,19 @@
+import { useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAnalysisStore } from "@/stores/analysisStore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { History, BarChart3, FileText } from "lucide-react";
 
 export default function HistoryPage() {
   const history = useAnalysisStore((s) => s.history);
-  const setResult = useAnalysisStore((s) => s.setResult);
+  const loadHistory = useAnalysisStore((s) => s.loadHistory);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const viewResult = (id: string) => {
     const entry = history.find((h) => h.id === id);
