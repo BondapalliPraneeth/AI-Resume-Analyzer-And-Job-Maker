@@ -26,13 +26,13 @@ export const useAnalysisStore = create<AnalysisStore>((set) => ({
     // Save to database
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        supabase.from("analysis_history").insert({
+        supabase.from("analysis_history").insert([{
           user_id: user.id,
           job_title: entry.jobTitle,
           match_score: entry.matchScore,
           ats_score: entry.atsScore,
-          result: result as unknown as Record<string, unknown>,
-        }).then();
+          result: result as unknown as Json,
+        }]).then();
       }
     });
 
