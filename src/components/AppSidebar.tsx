@@ -1,6 +1,8 @@
-import { FileText, BarChart3, History, Settings, Sparkles } from "lucide-react";
+import { FileText, BarChart3, History, Sparkles, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -11,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -24,6 +27,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { user, signOut } = useAuth();
   const isActive = (path: string) => location.pathname === path;
 
   return (
@@ -67,6 +71,26 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="p-4">
+        {user && (
+          <div className="space-y-2">
+            {!collapsed && (
+              <p className="text-xs text-sidebar-foreground/50 truncate">
+                {user.email}
+              </p>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+              onClick={signOut}
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              {!collapsed && "Sign Out"}
+            </Button>
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }
