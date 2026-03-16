@@ -48,7 +48,7 @@ export function extractResumeSkills(resumeText: string): string[] {
 // Simple resume data extraction from text
 export function parseResumeText(text: string): ResumeData {
   const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-  const phoneMatch = text.match(/[\+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]{7,}/);
+  const phoneMatch = text.match(/[+]?(?:[(]?[0-9]{1,4}[)]?[-\s./0-9]{7,})/);
 
   const lines = text.split("\n").filter(Boolean);
   const name = lines[0]?.trim() || "Unknown";
@@ -93,7 +93,7 @@ export function analyzeResume(
 
   // ATS score factors
   const hasEmail = /[\w.-]+@[\w.-]+\.\w+/.test(resumeText);
-  const hasPhone = /[\+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]{7,}/.test(resumeText);
+  const hasPhone = /[+]?(?:[(]?[0-9]{1,4}[)]?[-\s./0-9]{7,})/.test(resumeText);
   const hasEducation = /education|degree|university|college|bachelor|master/i.test(resumeText);
   const hasExperience = /experience|work|position|role|intern/i.test(resumeText);
   const hasProjects = /project|built|developed|created|implemented/i.test(resumeText);

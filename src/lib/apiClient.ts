@@ -13,12 +13,15 @@ async function request<T>(
 
   const res = await fetch(`${API_URL}${path}`, { ...opts, headers });
   const isJson = res.headers.get("content-type")?.includes("application/json");
-  const payload = isJson ? await res.json() : await res.text();
+  const payload: unknown = isJson ? await res.json() : await res.text();
 
   if (!res.ok) {
     const msg =
-      typeof payload === "object" && payload && "error" in payload
-        ? String((payload as any).error)
+      typeof payload === "object" &&
+      payload !== null &&
+      "error" in payload &&
+      typeof (payload as { error: unknown }).error === "string"
+        ? (payload as { error: string }).error
         : `Request failed (${res.status})`;
     throw new Error(msg);
   }
