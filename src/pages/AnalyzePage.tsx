@@ -9,6 +9,47 @@ import { useAnalysisStore } from "@/stores/analysisStore";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+function flattenJsonResume(json: Record<string, unknown>): string {
+  const lines: string[] = [];
+
+  const add = (label: string, value: unknown) => {
+    if (typeof value === "string" && value.trim()) lines.push(`${label}: ${value}`);
+  };
+
+  add("Name", json.name);
+  add("Email", json.email);
+  add("Phone", json.phone);
+  add("Summary", json.summary ?? json.objective);
+
+  if (Array.isArray(json.skills)) {
+    lines.push(`Skills: ${json.skills.join(", ")}`);
+  }
+
+  if (Array.isArray(json.experience)) {
+    lines.push("\nExperience:");
+    for (const exp of json.experience as Record<string, unknown>[]) {
+      lines.push(`- ${exp.role ?? exp.title ?? ""} at ${exp.company ?? ""} (${exp.duration ?? exp.dates ?? ""})`);
+      if (exp.description) lines.push(`  ${exp.description}`);
+    }
+  }
+
+  if (Array.isArray(json.education)) {
+    lines.push("\nEducation:");
+    for (const edu of json.education as Record<string, unknown>[]) {
+      lines.push(`- ${edu.degree ?? ""} from ${edu.institution ?? edu.school ?? ""} (${edu.year ?? edu.dates ?? ""})`);
+    }
+  }
+
+  if (Array.isArray(json.projects)) {
+    lines.push("\nProjects:");
+    for (const proj of json.projects as Record<string, unknown>[]) {
+      lines.push(`- ${proj.name ?? proj.title ?? ""}: ${proj.description ?? ""}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export default function AnalyzePage() {
   const [resumeText, setResumeText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -26,8 +67,21 @@ export default function AnalyzePage() {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
-        setResumeText(text);
-        toast.success(`Loaded ${file.name}`);
+
+        // If JSON file, try to parse and flatten to readable text
+        if (file.name.endsWith(".json")) {
+          try {
+            const json = JSON.parse(text);
+            const flattened = flattenJsonResume(json);
+            setResumeText(flattened);
+            toast.success(`Loaded JSON resume: ${file.name}`);
+          } catch {
+            toast.error("Invalid JSON file. Please check the format.");
+          }
+        } else {
+          setResumeText(text);
+          toast.success(`Loaded ${file.name}`);
+        }
       };
       reader.readAsText(file);
     },
@@ -69,7 +123,7 @@ export default function AnalyzePage() {
               <label className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 cursor-pointer hover:border-primary/50 transition-colors">
                 <input
                   type="file"
-                  accept=".txt,.pdf,.docx"
+                  accept=".txt,.json,.pdf,.docx"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
@@ -82,7 +136,7 @@ export default function AnalyzePage() {
                   <>
                     <Upload className="h-8 w-8 text-muted-foreground mb-2" />
                     <span className="text-sm text-muted-foreground">
-                      Click to upload (.txt)
+                      Click to upload (.txt, .json)
                     </span>
                   </>
                 )}
