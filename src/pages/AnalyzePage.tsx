@@ -8,6 +8,7 @@ import { analyzeResume } from "@/lib/analyzer";
 import { useAnalysisStore } from "@/stores/analysisStore";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { extractTextFromPdf } from "@/lib/pdf";
 
 function flattenJsonResume(json: Record<string, unknown>): string {
   const lines: string[] = [];
@@ -114,6 +115,29 @@ export default function AnalyzePage() {
       if (!file) return;
       setFileName(file.name);
 
+      const extension = file.name.split(".").pop()?.toLowerCase();
+
+      // For PDFs, extract readable text using pdf.js
+      if (extension === "pdf") {
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          const data = ev.target?.result as ArrayBuffer;
+          try {
+            const text = await extractTextFromPdf(data);
+            if (!text.trim()) {
+              toast.error("Could not extract text from this PDF. Try uploading a .txt or .json resume.");
+              return;
+            }
+            setResumeText(text);
+            toast.success(`Loaded PDF resume: ${file.name}`);
+          } catch {
+            toast.error("Failed to read PDF. Please upload as .txt or .json.");
+          }
+        };
+        reader.readAsArrayBuffer(file);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
@@ -123,7 +147,7 @@ export default function AnalyzePage() {
           return t.startsWith("{") || t.startsWith("[");
         };
 
-        const isJsonFile = file.name.toLowerCase().endsWith(".json");
+        const isJsonFile = extension === "json";
 
         // If JSON file (or content looks like JSON), parse and keep as pretty JSON
         if (isJsonFile || looksLikeJson(text)) {
