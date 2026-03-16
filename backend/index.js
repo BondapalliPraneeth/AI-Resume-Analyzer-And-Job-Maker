@@ -155,21 +155,31 @@ app.post("/history", auth, async (req, res) => {
   const body = z
     .object({
       jobTitle: z.string().min(1).max(200),
-      matchScore: z.number().int().min(0).max(100),
-      atsScore: z.number().int().min(0).max(100),
-      analyzedAt: z.string().datetime(),
+      matchScore: z.number().min(0).max(100),
+      atsScore: z.number().min(0).max(100),
+      analyzedAt: z.string().min(1),
       result: z.unknown(),
     })
     .safeParse(req.body);
 
-  if (!body.success) return res.status(400).json({ error: "Invalid input" });
+  if (!body.success) {
+    return res.status(400).json({ error: "Invalid input", issues: body.error.issues });
+  }
+
+  const analyzedAt = new Date(body.data.analyzedAt);
+  if (Number.isNaN(analyzedAt.getTime())) {
+    return res.status(400).json({
+      error: "Invalid input",
+      issues: [{ path: ["analyzedAt"], message: "Invalid datetime" }],
+    });
+  }
 
   const doc = await AnalysisHistory.create({
     userId,
     jobTitle: body.data.jobTitle,
     matchScore: body.data.matchScore,
     atsScore: body.data.atsScore,
-    analyzedAt: new Date(body.data.analyzedAt),
+    analyzedAt,
     result: body.data.result,
   });
 
