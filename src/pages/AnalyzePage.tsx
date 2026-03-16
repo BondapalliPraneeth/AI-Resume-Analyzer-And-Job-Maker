@@ -82,7 +82,7 @@ export default function AnalyzePage() {
               <label className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 cursor-pointer hover:border-primary/50 transition-colors">
                 <input
                   type="file"
-                  accept=".txt,.pdf,.docx"
+                  accept=".txt,.json,.pdf,.docx"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
