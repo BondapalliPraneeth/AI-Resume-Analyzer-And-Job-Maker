@@ -95,7 +95,7 @@ export default function AnalyzePage() {
                   <>
                     <Upload className="h-8 w-8 text-muted-foreground mb-2" />
                     <span className="text-sm text-muted-foreground">
-                      Click to upload (.txt)
+                      Click to upload (.txt, .json)
                     </span>
                   </>
                 )}
