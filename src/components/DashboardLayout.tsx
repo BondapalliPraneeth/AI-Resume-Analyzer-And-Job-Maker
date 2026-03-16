@@ -11,7 +11,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           <header className="h-14 flex items-center border-b bg-card px-4 shrink-0">
             <SidebarTrigger className="mr-4" />
             <span className="text-sm font-medium text-muted-foreground">
-              AI Resume Analyzer
+              Resume Analyzer
             </span>
           </header>
           <main className="flex-1 overflow-auto p-6">{children}</main>

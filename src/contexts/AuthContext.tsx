@@ -1,49 +1,81 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { api } from "@/lib/apiClient";
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  displayName?: string;
+};
 
 interface AuthContextType {
-  session: Session | null;
-  user: User | null;
+  token: string | null;
+  user: AuthUser | null;
   loading: boolean;
-  signOut: () => Promise<void>;
+  setAuth: (token: string, user: AuthUser) => void;
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
-  session: null,
+  token: null,
   user: null,
   loading: true,
-  signOut: async () => {},
+  setAuth: () => {},
+  signOut: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("auth_token"));
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const raw = localStorage.getItem("auth_user");
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
+    const bootstrap = async () => {
+      try {
+        const existing = localStorage.getItem("auth_token");
+        if (!existing) return;
+        const res = await api.getMe(existing);
+        setToken(existing);
+        setUser(res.user);
+        localStorage.setItem("auth_user", JSON.stringify(res.user));
+      } catch {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("auth_user");
+        setToken(null);
+        setUser(null);
+      } finally {
         setLoading(false);
       }
-    );
+    };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    bootstrap().catch(() => setLoading(false));
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  const setAuth = (nextToken: string, nextUser: AuthUser) => {
+    localStorage.setItem("auth_token", nextToken);
+    localStorage.setItem("auth_user", JSON.stringify(nextUser));
+    setToken(nextToken);
+    setUser(nextUser);
   };
 
+  const signOut = () => {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
+    setToken(null);
+    setUser(null);
+  };
+
+  const value = useMemo(
+    () => ({ token, user, loading, setAuth, signOut }),
+    [token, user, loading]
+  );
+
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
