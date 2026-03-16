@@ -118,15 +118,26 @@ export default function AnalyzePage() {
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
 
-        // If JSON file, try to parse and flatten to readable text
-        if (file.name.endsWith(".json")) {
+        const looksLikeJson = (s: string) => {
+          const t = s.trimStart();
+          return t.startsWith("{") || t.startsWith("[");
+        };
+
+        const isJsonFile = file.name.toLowerCase().endsWith(".json");
+
+        // If JSON file (or content looks like JSON), parse and keep as pretty JSON
+        if (isJsonFile || looksLikeJson(text)) {
           try {
             const json = JSON.parse(text);
-            const flattened = flattenJsonResume(json);
-            setResumeText(flattened);
+            setResumeText(JSON.stringify(json, null, 2));
             toast.success(`Loaded JSON resume: ${file.name}`);
           } catch {
-            toast.error("Invalid JSON file. Please check the format.");
+            if (isJsonFile) {
+              toast.error("Invalid JSON file. Please check the format.");
+            } else {
+              setResumeText(text);
+              toast.success(`Loaded ${file.name}`);
+            }
           }
         } else {
           setResumeText(text);
