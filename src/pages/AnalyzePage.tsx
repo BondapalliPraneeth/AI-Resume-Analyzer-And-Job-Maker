@@ -26,8 +26,21 @@ export default function AnalyzePage() {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
-        setResumeText(text);
-        toast.success(`Loaded ${file.name}`);
+
+        // If JSON file, try to parse and flatten to readable text
+        if (file.name.endsWith(".json")) {
+          try {
+            const json = JSON.parse(text);
+            const flattened = flattenJsonResume(json);
+            setResumeText(flattened);
+            toast.success(`Loaded JSON resume: ${file.name}`);
+          } catch {
+            toast.error("Invalid JSON file. Please check the format.");
+          }
+        } else {
+          setResumeText(text);
+          toast.success(`Loaded ${file.name}`);
+        }
       };
       reader.readAsText(file);
     },
