@@ -9,6 +9,47 @@ import { useAnalysisStore } from "@/stores/analysisStore";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+function flattenJsonResume(json: Record<string, unknown>): string {
+  const lines: string[] = [];
+
+  const add = (label: string, value: unknown) => {
+    if (typeof value === "string" && value.trim()) lines.push(`${label}: ${value}`);
+  };
+
+  add("Name", json.name);
+  add("Email", json.email);
+  add("Phone", json.phone);
+  add("Summary", json.summary ?? json.objective);
+
+  if (Array.isArray(json.skills)) {
+    lines.push(`Skills: ${json.skills.join(", ")}`);
+  }
+
+  if (Array.isArray(json.experience)) {
+    lines.push("\nExperience:");
+    for (const exp of json.experience as Record<string, unknown>[]) {
+      lines.push(`- ${exp.role ?? exp.title ?? ""} at ${exp.company ?? ""} (${exp.duration ?? exp.dates ?? ""})`);
+      if (exp.description) lines.push(`  ${exp.description}`);
+    }
+  }
+
+  if (Array.isArray(json.education)) {
+    lines.push("\nEducation:");
+    for (const edu of json.education as Record<string, unknown>[]) {
+      lines.push(`- ${edu.degree ?? ""} from ${edu.institution ?? edu.school ?? ""} (${edu.year ?? edu.dates ?? ""})`);
+    }
+  }
+
+  if (Array.isArray(json.projects)) {
+    lines.push("\nProjects:");
+    for (const proj of json.projects as Record<string, unknown>[]) {
+      lines.push(`- ${proj.name ?? proj.title ?? ""}: ${proj.description ?? ""}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export default function AnalyzePage() {
   const [resumeText, setResumeText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
