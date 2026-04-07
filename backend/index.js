@@ -70,6 +70,9 @@ function auth(req, res, next) {
   }
 }
 
+// ✅ Root route — fixes the GET / 404
+app.get("/", (_req, res) => res.json({ ok: true, message: "Job Maker API is running" }));
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.post("/auth/signup", async (req, res) => {
@@ -186,7 +189,11 @@ app.post("/history", auth, async (req, res) => {
   return res.status(201).json({ id: String(doc._id) });
 });
 
-app.listen(PORT, () => {
-  console.log(`API listening on :${PORT}`);
-});
+// ✅ Export app for Vercel (serverless), only listen locally
+if (process.env.NODE_ENV !== "production") {
+  app.listen(PORT, () => {
+    console.log(`API listening on :${PORT}`);
+  });
+}
 
+export default app;
