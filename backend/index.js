@@ -73,6 +73,10 @@ function auth(req, res, next) {
 // ✅ Root route — fixes the GET / 404
 app.get("/", (_req, res) => res.json({ ok: true, message: "Job Maker API is running" }));
 
+// Silence favicon 404s
+app.get("/favicon.ico", (_req, res) => res.status(204).end());
+app.get("/favicon.png", (_req, res) => res.status(204).end());
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.post("/auth/signup", async (req, res) => {
