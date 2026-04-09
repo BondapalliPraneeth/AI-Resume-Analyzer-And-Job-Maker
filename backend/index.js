@@ -17,13 +17,19 @@ if (!JWT_SECRET) throw new Error("Missing JWT_SECRET");
 await mongoose.connect(MONGODB_URI);
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(
   cors({
     origin: CORS_ORIGIN.split(",").map((s) => s.trim()),
     credentials: true,
   })
 );
+
+// Root route
+app.get("/", (_req, res) => res.json({ ok: true, message: "Resume Analyzer API Running" }));
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// ==================== AUTH LOGIC ====================
 
 const userSchema = new mongoose.Schema(
   {
@@ -70,12 +76,7 @@ function auth(req, res, next) {
   }
 }
 
-// ✅ Root route — fixes the GET / 404
-app.get("/", (_req, res) => res.json({ ok: true, message: "Job Maker API is running" }));
-
-
-
-app.get("/health", (_req, res) => res.json({ ok: true }));
+// ==================== ROUTES ====================
 
 app.post("/auth/signup", async (req, res) => {
   const body = z
@@ -94,6 +95,7 @@ app.post("/auth/signup", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ email, passwordHash, displayName: displayName ?? "" });
+
   const token = signToken(user);
 
   return res.json({
@@ -111,6 +113,7 @@ app.post("/auth/login", async (req, res) => {
     .safeParse(req.body);
 
   if (!body.success) return res.status(400).json({ error: "Invalid input" });
+
   const { email, password } = body.data;
 
   const user = await User.findOne({ email });
@@ -120,6 +123,7 @@ app.post("/auth/login", async (req, res) => {
   if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
   const token = signToken(user);
+
   return res.json({
     token,
     user: { id: String(user._id), email: user.email, displayName: user.displayName ?? "" },
@@ -128,10 +132,12 @@ app.post("/auth/login", async (req, res) => {
 
 app.get("/me", auth, async (req, res) => {
   const userId = req.user?.sub;
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
   const user = await User.findById(userId).lean();
   if (!user) return res.status(401).json({ error: "Unauthorized" });
-  return res.json({ user: { id: String(user._id), email: user.email, displayName: user.displayName ?? "" } });
+
+  return res.json({
+    user: { id: String(user._id), email: user.email, displayName: user.displayName ?? "" },
+  });
 });
 
 app.get("/history", auth, async (req, res) => {
@@ -154,30 +160,20 @@ app.get("/history", auth, async (req, res) => {
 });
 
 app.post("/history", auth, async (req, res) => {
-  const userId = req.user?.sub;
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
   const body = z
     .object({
       jobTitle: z.string().min(1).max(200),
       matchScore: z.number().min(0).max(100),
       atsScore: z.number().min(0).max(100),
-      analyzedAt: z.string().min(1),
+      analyzedAt: z.string(),
       result: z.unknown(),
     })
     .safeParse(req.body);
 
-  if (!body.success) {
-    return res.status(400).json({ error: "Invalid input", issues: body.error.issues });
-  }
+  if (!body.success) return res.status(400).json({ error: "Invalid input" });
 
+  const userId = req.user?.sub;
   const analyzedAt = new Date(body.data.analyzedAt);
-  if (Number.isNaN(analyzedAt.getTime())) {
-    return res.status(400).json({
-      error: "Invalid input",
-      issues: [{ path: ["analyzedAt"], message: "Invalid datetime" }],
-    });
-  }
 
   const doc = await AnalysisHistory.create({
     userId,
@@ -191,11 +187,7 @@ app.post("/history", auth, async (req, res) => {
   return res.status(201).json({ id: String(doc._id) });
 });
 
-// ✅ Export app for Vercel (serverless), only listen locally
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => {
-    console.log(`API listening on :${PORT}`);
-  });
-}
-
-export default app;
+// ==================== IMPORTANT FIX FOR RENDER ====================
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
