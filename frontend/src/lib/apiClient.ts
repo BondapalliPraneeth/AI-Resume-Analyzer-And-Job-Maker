@@ -1,7 +1,8 @@
 import type { AnalysisHistory, AnalysisResult } from "@/types/analysis";
 import type { AuthUser } from "@/contexts/AuthContext";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+// 🔥 HARD-CODED BACKEND URL
+const API_URL = "https://resume-backend-72zx.onrender.com";
 
 async function request<T>(
   path: string,
@@ -35,13 +36,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
   login: (input: { email: string; password: string }) =>
     request<{ token: string; user: AuthUser }>("/auth/login", {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
   getMe: (token: string) => request<{ user: AuthUser }>("/me", { token }),
-  listHistory: (token: string) => request<{ history: AnalysisHistory[] }>("/history", { token }),
+
+  listHistory: (token: string) =>
+    request<{ history: AnalysisHistory[] }>("/history", { token }),
+
   createHistory: (
     token: string,
     input: {
@@ -58,4 +64,3 @@ export const api = {
       body: JSON.stringify(input),
     }),
 };
-
