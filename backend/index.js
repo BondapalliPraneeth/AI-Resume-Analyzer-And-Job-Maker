@@ -18,10 +18,9 @@ await mongoose.connect(MONGODB_URI);
 
 const app = express();
 app.use(express.json({ limit: "5mb" }));
-app.use(
-  cors({
-    origin: CORS_ORIGIN.split(",").map((s) => s.trim()),
-    credentials: true,
+app.use(cors({
+  origin: "*",
+  credentials: true,
   })
 );
 
