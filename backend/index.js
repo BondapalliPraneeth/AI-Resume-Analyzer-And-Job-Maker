@@ -12,7 +12,6 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:5173";
 
-console.log("ENV CHECK:", process.env.OPENAI_API_KEY);
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -24,13 +23,8 @@ await mongoose.connect(MONGODB_URI);
 
 const app = express();
 app.use(express.json({ limit: "5mb" }));
-app.use(cors({
-  origin: "*",
-  credentials: true,
-  })
-);
+app.use(cors({ origin: "*", credentials: true }));
 
-// Root route
 app.get("/", (_req, res) => res.json({ ok: true, message: "Resume Analyzer API Running" }));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
@@ -100,7 +94,6 @@ app.post("/auth/signup", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ email, passwordHash, displayName: displayName ?? "" });
-
   const token = signToken(user);
 
   return res.json({
@@ -118,7 +111,6 @@ app.post("/auth/login", async (req, res) => {
     .safeParse(req.body);
 
   if (!body.success) return res.status(400).json({ error: "Invalid input" });
-
   const { email, password } = body.data;
 
   const user = await User.findOne({ email });
@@ -191,40 +183,92 @@ app.post("/history", auth, async (req, res) => {
 
   return res.status(201).json({ id: String(doc._id) });
 });
-const VALID_SKILLS = [
-  "java", "python", "javascript", "react", "node", "mongodb",
-  "sql", "html", "css", "communication", "sales", "marketing",
-  "negotiation", "leadership", "excel", "powerpoint"
-];
 
-// ==================== ANALYZE ROUTE (FIXED) ====================
-console.log("🔥 NEW ANALYZER CODE RUNNING");
+// ==================== WORDS THAT ARE NEVER SKILLS ====================
+// These common English words get falsely extracted as skills by the AI.
+// "go" → mistaken for Go (programming language)
+// "rest" → mistaken for REST (API protocol)
+const GENERIC_WORD_BLOCKLIST = new Set([
+  "go", "rest", "use", "good", "basic", "work", "lead", "run",
+  "help", "make", "able", "skill", "strong", "ability", "experience",
+  "knowledge", "understanding", "awareness", "team", "ability",
+  "various", "related", "relevant", "preferred", "required",
+  "including", "well", "high", "low", "new", "key", "other"
+]);
+
+/**
+ * Cleans and deduplicates an array of skill strings.
+ * Removes: short strings, generic English words, empty values.
+ */
+function cleanSkills(skills) {
+  const seen = new Set();
+  return (skills || [])
+    .map(s => (s || "").trim())
+    .filter(skill => {
+      if (!skill) return false;
+      const lower = skill.toLowerCase().replace(/[^a-z0-9\s\-\.]/g, "").trim();
+
+      // Remove anything under 3 characters
+      if (lower.length < 3) return false;
+
+      // Remove generic English words
+      if (GENERIC_WORD_BLOCKLIST.has(lower)) return false;
+
+      // Deduplicate (case-insensitive)
+      if (seen.has(lower)) return false;
+      seen.add(lower);
+
+      return true;
+    });
+}
+
+// ==================== ANALYZE ROUTE ====================
 app.post("/analyze", async (req, res) => {
   try {
     const { resumeText, jobDescription } = req.body;
 
     if (!resumeText || !jobDescription) {
-      return res.json({
-  test: "NEW CODE WORKING",
-  time: new Date().toISOString()
-});
+      return res.status(400).json({ error: "resumeText and jobDescription are required" });
     }
 
-    // -------- RESUME PROMPT (STRICT) --------
-    const resumePrompt = `
-You are a strict resume parser.
+    // -------- STEP 1: DETECT DOMAIN FROM JD --------
+    // We first ask AI what domain/industry this JD belongs to.
+    // This makes skill extraction domain-aware.
+    const domainPrompt = `
+What is the primary industry or domain of this job description?
+Reply with ONLY a single short phrase, e.g.: "software engineering", "agriculture", "finance", "healthcare", "marketing".
+Do not explain.
 
-Extract ONLY real skills explicitly mentioned.
+Job Description:
+${jobDescription}
+`;
+
+    const domainRes = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: domainPrompt }],
+      temperature: 0,
+    });
+
+    const detectedDomain = (domainRes.choices[0].message.content || "general").trim();
+    console.log("Detected domain:", detectedDomain);
+
+    // -------- STEP 2: EXTRACT SKILLS FROM RESUME --------
+    const resumePrompt = `
+You are an expert resume parser. The job is in the "${detectedDomain}" domain.
+
+Extract ONLY real, named skills, tools, technologies, certifications, or domain-specific competencies that are EXPLICITLY mentioned in the resume below.
 
 STRICT RULES:
-- No guessing
-- No inference
-- No short words (<3 letters)
-- Ignore words like: go, good, basic, etc.
-- Only include real skills like Java, Python, SQL, Communication
+- Do NOT extract common English words like "go", "rest", "use", "lead", "work", "good", "basic"
+- Do NOT extract job titles, company names, or locations
+- Do NOT infer or guess skills that are not mentioned
+- Include domain-specific skills (e.g., for agriculture: "crop rotation", "soil analysis", "irrigation", "GIS", "pesticide application")
+- Include technical skills (e.g., "Python", "Excel", "AutoCAD")
+- Include soft skills only if explicitly named (e.g., "communication", "leadership")
+- Return ONLY valid JSON, no explanation, no markdown
 
-Return JSON:
-{ "skills": [] }
+Output format:
+{ "skills": ["skill1", "skill2", "skill3"] }
 
 Resume:
 ${resumeText}
@@ -233,22 +277,34 @@ ${resumeText}
     const resumeRes = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: resumePrompt }],
-      temperature: 0
+      temperature: 0,
     });
 
     let resumeData;
     try {
-      resumeData = JSON.parse(resumeRes.choices[0].message.content);
+      const raw = resumeRes.choices[0].message.content.replace(/```json|```/g, "").trim();
+      resumeData = JSON.parse(raw);
     } catch {
       resumeData = { skills: [] };
     }
 
-    // -------- JD PROMPT --------
+    // -------- STEP 3: EXTRACT SKILLS FROM JD --------
     const jdPrompt = `
-Extract required skills from this job description.
+You are an expert job description parser. This JD is in the "${detectedDomain}" domain.
 
-Return JSON:
-{ "skills": [] }
+Extract ONLY real, named skills, tools, technologies, certifications, or domain-specific competencies that are REQUIRED or PREFERRED in the job description below.
+
+STRICT RULES:
+- Do NOT extract common English words like "go", "rest", "use", "lead", "work", "good", "basic"
+- Do NOT extract job titles, company names, or locations
+- Do NOT infer skills — only extract what is explicitly mentioned
+- Include domain-specific skills (e.g., for agriculture: "crop rotation", "soil analysis", "irrigation", "GIS", "pesticide application", "farm management")
+- Include technical skills (e.g., "Python", "Excel", "AutoCAD", "Tractor operation")
+- Include soft skills only if explicitly named
+- Return ONLY valid JSON, no explanation, no markdown
+
+Output format:
+{ "skills": ["skill1", "skill2", "skill3"] }
 
 Job Description:
 ${jobDescription}
@@ -257,77 +313,69 @@ ${jobDescription}
     const jdRes = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: jdPrompt }],
-      temperature: 0
+      temperature: 0,
     });
 
     let jdData;
     try {
-      jdData = JSON.parse(jdRes.choices[0].message.content);
+      const raw = jdRes.choices[0].message.content.replace(/```json|```/g, "").trim();
+      jdData = JSON.parse(raw);
     } catch {
       jdData = { skills: [] };
     }
 
-    // -------- MATCHING (FINAL FIX) --------
+    // -------- STEP 4: CLEAN SKILLS --------
+    // Remove generic words, short strings, and duplicates
+    const resumeSkills = cleanSkills(resumeData.skills);
+    const jdSkills = cleanSkills(jdData.skills);
 
-   // -------- HARD FILTER (FINAL FIX) --------
+    console.log("Resume skills:", resumeSkills);
+    console.log("JD skills:", jdSkills);
 
-// normalize helper
-const normalize = (s) =>
-  s.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+    // -------- STEP 5: MATCH SKILLS (case-insensitive) --------
+    const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
+    const jdSkillsLower = jdSkills.map(s => s.toLowerCase());
 
-// ---------- RESUME SKILLS ----------
-const resumeSkills = (resumeData.skills || [])
-  .map(s => s.trim())
-  .filter(skill => {
-    const n = normalize(skill);
+    const matched = jdSkills.filter(skill =>
+      resumeSkillsLower.includes(skill.toLowerCase())
+    );
 
-    // remove garbage
-    if (n.length < 3) return false;
+    const missing = jdSkills.filter(skill =>
+      !resumeSkillsLower.includes(skill.toLowerCase())
+    );
 
-    // allow only known skills
-    return VALID_SKILLS.includes(n);
-  });
+    // -------- STEP 6: SCORE --------
+    const matchScore = jdSkills.length
+      ? Math.round((matched.length / jdSkills.length) * 100)
+      : 0;
 
-// ---------- JD SKILLS ----------
-const jdSkills = (jdData.skills || [])
-  .map(s => s.trim())
-  .filter(skill => {
-    const n = normalize(skill);
-    if (n.length < 3) return false;
+    // -------- STEP 7: GENERATE IMPROVEMENT SUGGESTIONS --------
+    const suggestions = missing.slice(0, 5).map(skill =>
+      `Add "${skill}" to your resume if you have experience with it.`
+    );
 
-    return VALID_SKILLS.includes(n);
-  });
+    if (missing.length > 5) {
+      suggestions.push(`...and ${missing.length - 5} more missing skills.`);
+    }
 
-// ---------- MATCH ----------
-const matched = resumeSkills.filter(skill =>
-  jdSkills.includes(skill)
-);
-
-// ---------- SCORE ----------
-const score = jdSkills.length
-  ? Math.round((matched.length / jdSkills.length) * 100)
-  : 0;
-
-    // ---------- DEBUG (OPTIONAL) ----------
-    console.log("RAW AI:", resumeData.skills);
-    console.log("FINAL:", resumeSkills);
-
-    // ---------- RESPONSE ----------
+    // -------- RESPONSE --------
     return res.json({
+      domain: detectedDomain,
       resumeSkills,
       jdSkills,
       matched,
-      score
+      missing,
+      score: matchScore,
+      suggestions,
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Analyze error:", err);
     return res.status(500).json({ error: "Analysis failed" });
   }
 });
 
-
-// ==================== IMPORTANT FIX FOR RENDER ====================
+// ==================== START SERVER ====================
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
