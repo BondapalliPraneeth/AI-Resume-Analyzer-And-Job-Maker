@@ -208,6 +208,7 @@ app.post("/analyze", async (req, res) => {
   test: "NEW CODE WORKING",
   time: new Date().toISOString()
 });
+    }
 
     // -------- RESUME PROMPT (STRICT) --------
     const resumePrompt = `
