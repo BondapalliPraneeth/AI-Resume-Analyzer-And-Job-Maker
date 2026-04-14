@@ -189,12 +189,15 @@ app.post("/history", auth, async (req, res) => {
 // "go" → mistaken for Go (programming language)
 // "rest" → mistaken for REST (API protocol)
 const GENERIC_WORD_BLOCKLIST = new Set([
-  "go", "rest", "use", "good", "basic", "work", "lead", "run",
-  "help", "make", "able", "skill", "strong", "ability", "experience",
-  "knowledge", "understanding", "awareness", "team", "ability",
-  "various", "related", "relevant", "preferred", "required",
-  "including", "well", "high", "low", "new", "key", "other"
+  "go", "rest", "use", "lead", "work", "build", "run", "help",
+  "good", "strong", "ability", "experience", "knowledge"
 ]);
+
+function filterSkills(skills) {
+  return skills.filter(skill => 
+    skill.length > 2 && !GENERIC_WORD_BLOCKLIST.has(skill.toLowerCase())
+  );
+}
 
 /**
  * Cleans and deduplicates an array of skill strings.
@@ -232,17 +235,18 @@ app.post("/analyze", async (req, res) => {
     }
 
     // -------- STEP 1: DETECT DOMAIN FROM JD --------
-    // We first ask AI what domain/industry this JD belongs to.
-    // This makes skill extraction domain-aware.
-    const domainPrompt = `
-What is the primary industry or domain of this job description?
-Reply with ONLY a single short phrase, e.g.: "software engineering", "agriculture", "finance", "healthcare", "marketing".
-Do not explain.
+const prompt = `
+Extract skills from this job description as a JSON array.
+Only include named skills, tools, certifications, or domain expertise.
+Return ONLY valid JSON, no explanation.
 
-Job Description:
-${jobDescription}
+Example output: ["crop rotation", "soil testing", "drip irrigation", "GIS"]
+
+Job Description: ${jd}
 `;
 
+const raw = await callAI(prompt);
+const skills = JSON.parse(raw); // then apply your blocklist filter
     const domainRes = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: domainPrompt }],
@@ -253,27 +257,17 @@ ${jobDescription}
     console.log("Detected domain:", detectedDomain);
 
     // -------- STEP 2: EXTRACT SKILLS FROM RESUME --------
-    const resumePrompt = `
-You are an expert resume parser. The job is in the "${detectedDomain}" domain.
+    // FIXED - domain-aware with anti-hallucination guard
+`You are a skill extraction expert. Extract ONLY real, named technical skills, tools, frameworks, certifications, or domain-specific competencies from the job description below.
 
-Extract ONLY real, named skills, tools, technologies, certifications, or domain-specific competencies that are EXPLICITLY mentioned in the resume below.
+Rules:
+- Do NOT extract common English verbs or prepositions (e.g., "go", "rest", "lead", "use")
+- Do NOT extract generic words unless they refer to a specific named technology or domain skill
+- If the JD is about agriculture, extract skills like "crop management", "soil analysis", "GIS", "irrigation systems", etc.
+- Return a JSON array of skill strings only. Example: ["Python", "GIS", "Soil Science"]
 
-STRICT RULES:
-- Do NOT extract common English words like "go", "rest", "use", "lead", "work", "good", "basic"
-- Do NOT extract job titles, company names, or locations
-- Do NOT infer or guess skills that are not mentioned
-- Include domain-specific skills (e.g., for agriculture: "crop rotation", "soil analysis", "irrigation", "GIS", "pesticide application")
-- Include technical skills (e.g., "Python", "Excel", "AutoCAD")
-- Include soft skills only if explicitly named (e.g., "communication", "leadership")
-- Return ONLY valid JSON, no explanation, no markdown
-
-Output format:
-{ "skills": ["skill1", "skill2", "skill3"] }
-
-Resume:
-${resumeText}
-`;
-
+Job Description:
+${jobDescription}`
     const resumeRes = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: resumePrompt }],
@@ -326,11 +320,9 @@ ${jobDescription}
 
     // -------- STEP 4: CLEAN SKILLS --------
     // Remove generic words, short strings, and duplicates
-    const resumeSkills = cleanSkills(resumeData.skills);
-    const jdSkills = cleanSkills(jdData.skills);
-
-    console.log("Resume skills:", resumeSkills);
-    console.log("JD skills:", jdSkills);
+   const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
+const matched = jdSkills.filter(s => resumeSkillsLower.includes(s.toLowerCase()));
+const missing = jdSkills.filter(s => !resumeSkillsLower.includes(s.toLowerCase()));
 
     // -------- STEP 5: MATCH SKILLS (case-insensitive) --------
     const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
