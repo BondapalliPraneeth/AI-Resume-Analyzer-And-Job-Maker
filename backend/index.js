@@ -198,7 +198,7 @@ const VALID_SKILLS = [
 ];
 
 // ==================== ANALYZE ROUTE (FIXED) ====================
-
+console.log("🔥 NEW ANALYZER CODE RUNNING");
 app.post("/analyze", async (req, res) => {
   try {
     const { resumeText, jobDescription } = req.body;
