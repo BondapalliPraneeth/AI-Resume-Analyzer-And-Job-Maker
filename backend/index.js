@@ -206,20 +206,15 @@ app.post("/analyze", async (req, res) => {
     const resumePrompt = `
 You are a strict ATS resume parser.
 
-TASK:
-Extract ONLY skills that are EXACTLY present in the resume text.
+Extract ONLY skills explicitly mentioned in the resume.
 
-STRICT RULES:
-- Do NOT guess
-- Do NOT infer
-- Do NOT add common skills
-- Do NOT include skills not explicitly written
-- If a skill is not clearly present, IGNORE it
+Rules:
+- No guessing
+- No inference
+- No extra skills
 
-Return ONLY valid JSON:
-{
-  "skills": []
-}
+Return JSON:
+{ "skills": [] }
 
 Resume:
 ${resumeText}
@@ -262,37 +257,45 @@ ${jobDescription}
       jdData = { skills: [] };
     }
 
-    // -------- MATCHING --------
+    // -------- MATCHING (FINAL FIX) --------
+
+    // Escape regex safely
+    const escapeRegex = (str) =>
+      str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Normalize for comparison
     const normalize = (s) =>
-      s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
 
-    const rawResumeSkills = resumeData.skills || [];
+    // ---------- RESUME SKILLS ----------
+    const resumeSkills = (resumeData.skills || []).filter(skill => {
+      if (!skill || skill.length < 2) return false;
 
-const resumeTextWords = resumeText.toLowerCase().split(/\s+/);
+      const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
+      return pattern.test(resumeText);
+    });
 
-const resumeSkills = rawResumeSkills
-  .map(normalize)
-  .filter(skill =>
-    resumeTextWords.includes(skill)
-  );
-   const rawJDSkills = jdData.skills || [];
+    // ---------- JD SKILLS ----------
+    const jdSkills = (jdData.skills || []).filter(skill => {
+      if (!skill || skill.length < 2) return false;
 
-const jdTextWords = jobDescription.toLowerCase().split(/\s+/);
+      const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
+      return pattern.test(jobDescription);
+    });
 
-const jdSkills = rawJDSkills
-  .map(normalize)
-  .filter(skill =>
-    jdTextWords.includes(skill)
-  );
-
-    const matched = resumeSkills.filter(skill =>
-      jdSkills.includes(skill)
+    // ---------- MATCH ----------
+    const matched = resumeSkills.filter(rSkill =>
+      jdSkills.some(jSkill =>
+        normalize(jSkill) === normalize(rSkill)
+      )
     );
 
+    // ---------- SCORE ----------
     const score = jdSkills.length
       ? Math.round((matched.length / jdSkills.length) * 100)
       : 0;
 
+    // ---------- RESPONSE ----------
     return res.json({
       resumeSkills,
       jdSkills,
@@ -305,6 +308,7 @@ const jdSkills = rawJDSkills
     return res.status(500).json({ error: "Analysis failed" });
   }
 });
+
 
 // ==================== IMPORTANT FIX FOR RENDER ====================
 app.listen(PORT, () => {
