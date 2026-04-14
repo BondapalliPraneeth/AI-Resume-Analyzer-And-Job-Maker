@@ -202,16 +202,18 @@ app.post("/analyze", async (req, res) => {
       return res.status(400).json({ error: "Missing data" });
     }
 
-    // -------- RESUME SKILLS --------
+    // -------- RESUME PROMPT (STRICT) --------
     const resumePrompt = `
-You are a strict ATS resume parser.
+You are a strict resume parser.
 
-Extract ONLY skills explicitly mentioned in the resume.
+Extract ONLY real skills explicitly mentioned.
 
-Rules:
+STRICT RULES:
 - No guessing
 - No inference
-- No extra skills
+- No short words (<3 letters)
+- Ignore words like: go, good, basic, etc.
+- Only include real skills like Java, Python, SQL, Communication
 
 Return JSON:
 { "skills": [] }
@@ -233,7 +235,7 @@ ${resumeText}
       resumeData = { skills: [] };
     }
 
-    // -------- JD SKILLS --------
+    // -------- JD PROMPT --------
     const jdPrompt = `
 Extract required skills from this job description.
 
@@ -259,29 +261,36 @@ ${jobDescription}
 
     // -------- MATCHING (FINAL FIX) --------
 
-    // Escape regex safely
+    const blacklist = ["go", "c", "ok", "na", "yes"];
+
     const escapeRegex = (str) =>
       str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    // Normalize for comparison
     const normalize = (s) =>
       s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
 
     // ---------- RESUME SKILLS ----------
-    const resumeSkills = (resumeData.skills || []).filter(skill => {
-      if (!skill || skill.length < 2) return false;
+    const resumeSkills = (resumeData.skills || [])
+      .map(s => s.trim())
+      .filter(skill => {
+        if (!skill || skill.length < 3) return false;
 
-      const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
-      return pattern.test(resumeText);
-    });
+        const lower = skill.toLowerCase();
+        if (blacklist.includes(lower)) return false;
+
+        const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
+        return pattern.test(resumeText);
+      });
 
     // ---------- JD SKILLS ----------
-    const jdSkills = (jdData.skills || []).filter(skill => {
-      if (!skill || skill.length < 2) return false;
+    const jdSkills = (jdData.skills || [])
+      .map(s => s.trim())
+      .filter(skill => {
+        if (!skill || skill.length < 3) return false;
 
-      const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
-      return pattern.test(jobDescription);
-    });
+        const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
+        return pattern.test(jobDescription);
+      });
 
     // ---------- MATCH ----------
     const matched = resumeSkills.filter(rSkill =>
@@ -294,6 +303,10 @@ ${jobDescription}
     const score = jdSkills.length
       ? Math.round((matched.length / jdSkills.length) * 100)
       : 0;
+
+    // ---------- DEBUG (OPTIONAL) ----------
+    console.log("RAW AI:", resumeData.skills);
+    console.log("FINAL:", resumeSkills);
 
     // ---------- RESPONSE ----------
     return res.json({
