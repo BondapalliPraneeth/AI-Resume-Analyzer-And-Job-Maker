@@ -5,11 +5,16 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import OpenAI from "openai";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const MONGODB_URI = process.env.MONGODB_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:5173";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 if (!MONGODB_URI) throw new Error("Missing MONGODB_URI");
 if (!JWT_SECRET) throw new Error("Missing JWT_SECRET");
@@ -184,6 +189,98 @@ app.post("/history", auth, async (req, res) => {
   });
 
   return res.status(201).json({ id: String(doc._id) });
+});
+
+// ==================== ANALYZE ROUTE (FIXED) ====================
+
+app.post("/analyze", async (req, res) => {
+  try {
+    const { resumeText, jobDescription } = req.body;
+
+    if (!resumeText || !jobDescription) {
+      return res.status(400).json({ error: "Missing data" });
+    }
+
+    // -------- RESUME SKILLS --------
+    const resumePrompt = `
+You are an ATS parser.
+
+Extract ONLY skills explicitly mentioned.
+
+Rules:
+- No guessing
+- No adding new skills
+
+Return JSON:
+{ "skills": [] }
+
+Resume:
+${resumeText}
+`;
+
+    const resumeRes = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: resumePrompt }],
+      temperature: 0
+    });
+
+    let resumeData;
+    try {
+      resumeData = JSON.parse(resumeRes.choices[0].message.content);
+    } catch {
+      resumeData = { skills: [] };
+    }
+
+    // -------- JD SKILLS --------
+    const jdPrompt = `
+Extract required skills from this job description.
+
+Return JSON:
+{ "skills": [] }
+
+Job Description:
+${jobDescription}
+`;
+
+    const jdRes = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: jdPrompt }],
+      temperature: 0
+    });
+
+    let jdData;
+    try {
+      jdData = JSON.parse(jdRes.choices[0].message.content);
+    } catch {
+      jdData = { skills: [] };
+    }
+
+    // -------- MATCHING --------
+    const normalize = (s) =>
+      s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    const resumeSkills = resumeData.skills.map(normalize);
+    const jdSkills = jdData.skills.map(normalize);
+
+    const matched = resumeSkills.filter(skill =>
+      jdSkills.includes(skill)
+    );
+
+    const score = jdSkills.length
+      ? Math.round((matched.length / jdSkills.length) * 100)
+      : 0;
+
+    return res.json({
+      resumeSkills,
+      jdSkills,
+      matched,
+      score
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Analysis failed" });
+  }
 });
 
 // ==================== IMPORTANT FIX FOR RENDER ====================
