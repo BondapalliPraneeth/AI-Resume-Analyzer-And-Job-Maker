@@ -268,17 +268,21 @@ ${jobDescription}
 
     const rawResumeSkills = resumeData.skills || [];
 
+const resumeTextWords = resumeText.toLowerCase().split(/\s+/);
+
 const resumeSkills = rawResumeSkills
   .map(normalize)
   .filter(skill =>
-    resumeText.toLowerCase().includes(skill)
+    resumeTextWords.includes(skill)
   );
    const rawJDSkills = jdData.skills || [];
+
+const jdTextWords = jobDescription.toLowerCase().split(/\s+/);
 
 const jdSkills = rawJDSkills
   .map(normalize)
   .filter(skill =>
-    jobDescription.toLowerCase().includes(skill)
+    jdTextWords.includes(skill)
   );
 
     const matched = resumeSkills.filter(skill =>
