@@ -191,6 +191,11 @@ app.post("/history", auth, async (req, res) => {
 
   return res.status(201).json({ id: String(doc._id) });
 });
+const VALID_SKILLS = [
+  "java", "python", "javascript", "react", "node", "mongodb",
+  "sql", "html", "css", "communication", "sales", "marketing",
+  "negotiation", "leadership", "excel", "powerpoint"
+];
 
 // ==================== ANALYZE ROUTE (FIXED) ====================
 
@@ -261,48 +266,44 @@ ${jobDescription}
 
     // -------- MATCHING (FINAL FIX) --------
 
-    const blacklist = ["go", "c", "ok", "na", "yes"];
+   // -------- HARD FILTER (FINAL FIX) --------
 
-    const escapeRegex = (str) =>
-      str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// normalize helper
+const normalize = (s) =>
+  s.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 
-    const normalize = (s) =>
-      s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+// ---------- RESUME SKILLS ----------
+const resumeSkills = (resumeData.skills || [])
+  .map(s => s.trim())
+  .filter(skill => {
+    const n = normalize(skill);
 
-    // ---------- RESUME SKILLS ----------
-    const resumeSkills = (resumeData.skills || [])
-      .map(s => s.trim())
-      .filter(skill => {
-        if (!skill || skill.length < 3) return false;
+    // remove garbage
+    if (n.length < 3) return false;
 
-        const lower = skill.toLowerCase();
-        if (blacklist.includes(lower)) return false;
+    // allow only known skills
+    return VALID_SKILLS.includes(n);
+  });
 
-        const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
-        return pattern.test(resumeText);
-      });
+// ---------- JD SKILLS ----------
+const jdSkills = (jdData.skills || [])
+  .map(s => s.trim())
+  .filter(skill => {
+    const n = normalize(skill);
+    if (n.length < 3) return false;
 
-    // ---------- JD SKILLS ----------
-    const jdSkills = (jdData.skills || [])
-      .map(s => s.trim())
-      .filter(skill => {
-        if (!skill || skill.length < 3) return false;
+    return VALID_SKILLS.includes(n);
+  });
 
-        const pattern = new RegExp(`\\b${escapeRegex(skill)}\\b`, "i");
-        return pattern.test(jobDescription);
-      });
+// ---------- MATCH ----------
+const matched = resumeSkills.filter(skill =>
+  jdSkills.includes(skill)
+);
 
-    // ---------- MATCH ----------
-    const matched = resumeSkills.filter(rSkill =>
-      jdSkills.some(jSkill =>
-        normalize(jSkill) === normalize(rSkill)
-      )
-    );
-
-    // ---------- SCORE ----------
-    const score = jdSkills.length
-      ? Math.round((matched.length / jdSkills.length) * 100)
-      : 0;
+// ---------- SCORE ----------
+const score = jdSkills.length
+  ? Math.round((matched.length / jdSkills.length) * 100)
+  : 0;
 
     // ---------- DEBUG (OPTIONAL) ----------
     console.log("RAW AI:", resumeData.skills);
