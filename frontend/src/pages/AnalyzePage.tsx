@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { analyzeResume } from "@/lib/analyzer";
+import { analyzeResumeWithAI } from "@/lib/aiAnalyzer";
 import { useAnalysisStore } from "@/stores/analysisStore";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -179,12 +179,26 @@ export default function AnalyzePage() {
       return;
     }
     setIsAnalyzing(true);
-    // Simulate processing delay
-    await new Promise((r) => setTimeout(r, 1500));
-    const result = analyzeResume(resumeText, jobDescription);
-    setResult(result, jobDescription.slice(0, 60));
-    setIsAnalyzing(false);
-    navigate("/results");
+    try {
+      // Convert JSON resume to readable text for AI analysis
+      let textForAnalysis = resumeText;
+      try {
+        const parsed = JSON.parse(resumeText);
+        if (typeof parsed === "object" && parsed !== null) {
+          textForAnalysis = flattenJsonResume(parsed as Record<string, unknown>);
+        }
+      } catch {
+        // Not JSON, use as-is
+      }
+
+      const result = await analyzeResumeWithAI(textForAnalysis, jobDescription);
+      setResult(result, jobDescription.slice(0, 60));
+      navigate("/results");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (

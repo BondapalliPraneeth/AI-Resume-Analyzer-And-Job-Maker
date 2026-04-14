@@ -1,0 +1,14 @@
+{
+  "name": "resumeai",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cd frontend && npx vite --host 0.0.0.0 --port 8080",
+    "build": "cd frontend && npx vite build",
+    "postinstall": "cd frontend && npm install"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0"
+  }
+}
