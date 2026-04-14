@@ -204,8 +204,10 @@ app.post("/analyze", async (req, res) => {
     const { resumeText, jobDescription } = req.body;
 
     if (!resumeText || !jobDescription) {
-      return res.status(400).json({ error: "Missing data" });
-    }
+      return res.json({
+  test: "NEW CODE WORKING",
+  time: new Date().toISOString()
+});
 
     // -------- RESUME PROMPT (STRICT) --------
     const resumePrompt = `
