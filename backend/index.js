@@ -12,6 +12,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:5173";
 
+console.log("ENV CHECK:", process.env.OPENAI_API_KEY);
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
