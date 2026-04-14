@@ -204,16 +204,22 @@ app.post("/analyze", async (req, res) => {
 
     // -------- RESUME SKILLS --------
     const resumePrompt = `
-You are an ATS parser.
+You are a strict ATS resume parser.
 
-Extract ONLY skills explicitly mentioned.
+TASK:
+Extract ONLY skills that are EXACTLY present in the resume text.
 
-Rules:
-- No guessing
-- No adding new skills
+STRICT RULES:
+- Do NOT guess
+- Do NOT infer
+- Do NOT add common skills
+- Do NOT include skills not explicitly written
+- If a skill is not clearly present, IGNORE it
 
-Return JSON:
-{ "skills": [] }
+Return ONLY valid JSON:
+{
+  "skills": []
+}
 
 Resume:
 ${resumeText}
@@ -260,8 +266,20 @@ ${jobDescription}
     const normalize = (s) =>
       s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-    const resumeSkills = resumeData.skills.map(normalize);
-    const jdSkills = jdData.skills.map(normalize);
+    const rawResumeSkills = resumeData.skills || [];
+
+const resumeSkills = rawResumeSkills
+  .map(normalize)
+  .filter(skill =>
+    resumeText.toLowerCase().includes(skill)
+  );
+   const rawJDSkills = jdData.skills || [];
+
+const jdSkills = rawJDSkills
+  .map(normalize)
+  .filter(skill =>
+    jobDescription.toLowerCase().includes(skill)
+  );
 
     const matched = resumeSkills.filter(skill =>
       jdSkills.includes(skill)
